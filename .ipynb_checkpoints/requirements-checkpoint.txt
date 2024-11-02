@@ -1,2 +1,4 @@
-Pillow==8.4.0
-pandas==1.2.3
+streamlit==1.39.0
+matplotlib==3.9.2
+pandas==2.2.3
+pillow==10.4.0
