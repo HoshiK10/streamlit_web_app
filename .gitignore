@@ -1,2 +1,9 @@
+# Python
+__pycache__/
+*.pyc
+
+# VS Code 個人設定
+.vscode/
+
 # 念のためローカルのsecretsを誤コミット防止
 .streamlit/
