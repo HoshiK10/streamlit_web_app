@@ -1,0 +1,2 @@
+# 念のためローカルのsecretsを誤コミット防止
+.streamlit/
