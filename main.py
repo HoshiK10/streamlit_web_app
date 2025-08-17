@@ -28,14 +28,21 @@ st.markdown("""
   /* 一部ブラウザ向け：不要な強制改ページを避ける */
   * { page-break-after: auto !important; }
 }
-/* 凡例のライト/ダーク対応（Streamlitテーマの文字色を利用） */
 .legend-item { display:flex; align-items:flex-start; margin:10px 0; }
 .legend-icon { flex:0 0 auto; display:inline-block; margin:2px 10px 0 2px; }
 .legend-text { line-height:1.35; }
 .legend-title { font-weight:700; color: var(--text-color); }
-.legend-desc  { color: var(--text-color); opacity: .75; white-space: pre-wrap; font-size: 13px; }
+.legend-desc  { color: var(--text-color); opacity:.75; white-space: pre-wrap; font-size:13px; }
+
+/* ✅ 幅に応じて 1～2列に自動切替。順序はHTMLの出現順を保持 */
+.legend-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 8px 16px;
+}
 </style>
 """, unsafe_allow_html=True)
+
 st.title("🍽 近くの飲食店マップ")
 
 def _normalize_hex(s: str) -> str:
@@ -238,13 +245,12 @@ for row in legend_rows:
 if to_render:
     st.write("---")
     st.subheader("ピンの色の凡例")
-    cols = st.columns(2)
-    for i, it in enumerate(to_render):
+    
+    html_parts = ["<div class='legend-grid'>"]
+    for it in to_render:  # ← CSVの行順のまま
         safe_label = _html.escape(it["label"])
         safe_desc  = _html.escape(it["desc"])
-        with cols[i % 2]:
-            st.markdown(
-                f"""
+        html_parts.append(f"""
 <div class="legend-item">
   <img src="{it['icon_src']}" width="{it['w']}" height="{it['h']}" class="legend-icon"/>
   <div class="legend-text">
@@ -252,9 +258,10 @@ if to_render:
     {f"<div class='legend-desc'>{safe_desc}</div>" if safe_desc else ""}
   </div>
 </div>
-""",
-                unsafe_allow_html=True,
-            )
+""")
+    html_parts.append("</div>")  # .legend-grid
+
+    st.markdown("".join(html_parts), unsafe_allow_html=True)
 else:
     st.info("表示中のピンに対応する凡例はありません。")
 
