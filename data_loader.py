@@ -379,3 +379,25 @@ def build_geo_from_rows(rows: List[Dict]) -> Dict:
             "dup_notes": dup_notes,
         },
     }
+
+def load_color_legend_ordered(path: str) -> list[dict]:
+    """
+    color_legend.csv を『記述順のまま』読み込む。
+    返り値: [{'key': 色キー, 'label': ラベル, 'desc': 説明}, ...]
+    色キーは #RRGGBB / 色名 / rgb()/rgba() / 'current_pin' を想定。
+    """
+    if not os.path.exists(path):
+        return []
+    rows = []
+    with open(path, "r", encoding="utf-8-sig", newline="") as f:
+        reader = csv.DictReader(f)
+        for r in reader:
+            key = (r.get("色") or r.get("color") or "").strip()
+            if not key:
+                continue
+            rows.append({
+                "key": key,
+                "label": (r.get("ラベル") or r.get("label") or "").strip(),
+                "desc":  (r.get("説明") or r.get("desc")  or "").strip(),
+            })
+    return rows

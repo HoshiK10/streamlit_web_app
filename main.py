@@ -4,10 +4,11 @@ from data_loader import (
     backfill_missing_latlng_and_save,
     build_geo_from_rows,
     load_color_legend,
+    load_color_legend_ordered,
 )
 from map_view import build_map_html
 from qr_utils import show_qr_simple
-import urllib.parse
+import urllib.parse, re
 import html as _html  # ← 追加（HTMLエスケープ用）
 
 st.set_page_config(page_title="近くの飲食店マップ", layout="wide")
@@ -159,97 +160,88 @@ with col2:
     )
 
 # ---- ピンの凡例（現在位置 + 色）----
+# ---- ピンの凡例（CSVの順番でのみ表示）----
 LEGEND_CSV = "color_legend.csv"
-legend_map = load_color_legend(LEGEND_CSV)
+legend_rows = load_color_legend_ordered(LEGEND_CSV)  # [{key,label,desc}] 順序保持
 
-def _norm_color(c: str | None) -> str:
-    import re
-    s = (c or "").strip().lower()
+def canon_color_key(s: str) -> str:
     if not s:
-        return "#ef4444"  # デフォルト赤（map_view 側に合わせる）
-    s = re.sub(r"\s+", "", s)
-    if re.fullmatch(r"[0-9a-f]{6}", s):
-        s = "#" + s
-    return s
+        return ""
+    t = re.sub(r"\s+", "", s.strip()).lower()
+    m = re.fullmatch(r"#?([0-9a-f]{6})", t)
+    return f"#{m.group(1)}" if m else t  # hex6桁は # を付与、それ以外はそのまま（色名/rgba/…）
 
-# いま表示中の店舗から使用色を収集
-used_colors = {_norm_color(p.get("color")) for p in places_for_view}
+# 地図に実際に出ている“色”を正規化して収集（空は除外）
+used_colors = {
+    canon_color_key(p.get("color"))
+    for p in places_for_view
+    if (p.get("color") or "").strip()
+}
 
-# 同一点に複数色が混在する場合は「まとめピン色(#F59E0B)」を追加
-from collections import defaultdict
-groups = defaultdict(list)
-for p in places_for_view:
-    key = (round(p["lat"], 6), round(p["lng"], 6))
-    groups[key].append(_norm_color(p.get("color")))
-for cols in groups.values():
-    if len(cols) >= 2 and len(set(cols)) >= 2:
-        used_colors.add("#f59e0b")
+# もし同一点に複数色が混在して“まとめピン色”を使っているなら、
+# それも CSV に載せておくのが推奨です（自動追加はしない）。
+# 例：legend_rows に key = #F59E0B の行を用意しておく
 
 has_current = bool(geo.get("pin_center"))
-has_colors  = bool(used_colors)
 
-if has_current or has_colors:
-    st.write("---")
-    st.subheader("ピンの色の凡例")
+# 色ピンSVG（凡例用）
+def _normalize_hex(s: str) -> str:
+    t = canon_color_key(s)
+    return t if t.startswith("#") and len(t) == 7 else t
 
-    # 地図ピンと同じ形の SVG を凡例でも使う（色ピン用）
-    import urllib.parse, re
-    def _normalize_hex(s: str) -> str:
-        ss = (s or "").strip().lower()
-        ss = re.sub(r"\s+", "", ss)
-        m = re.fullmatch(r"#?([0-9a-f]{6})", ss)
-        return f"#{m.group(1)}" if m else ss
-    def _darken_hex(hex_color: str, amount: float = 0.3):
-        m = re.fullmatch(r"#([0-9a-f]{6})", (hex_color or "").lower())
-        if not m: return None
-        num = int(m.group(1), 16)
-        r = max(0, int(((num>>16)&255)*(1-amount)))
-        g = max(0, int(((num>>8 )&255)*(1-amount)))
-        b = max(0, int(((num    )&255)*(1-amount)))
-        return f"#{r:02x}{g:02x}{b:02x}"
-    def make_pin_svg_data_uri(fill: str):
-        s = _darken_hex(_normalize_hex(fill)) or fill
-        svg = (
-            "<svg xmlns='http://www.w3.org/2000/svg' width='36' height='54' viewBox='0 0 36 54'>"
-            f"<path fill='{fill}' stroke='{s}' d='M18 0c-9.94 0-18 8.06-18 18 0 12 18 36 18 36s18-24 18-36C36 8.06 27.94 0 18 0z'/>"
-            "<circle cx='18' cy='18' r='6' fill='#ffffff'/>"
-            "</svg>"
-        )
-        return "data:image/svg+xml;utf8," + urllib.parse.quote(svg)
+def _darken_hex(hex_color: str, amount: float = 0.3):
+    m = re.fullmatch(r"#([0-9a-f]{6})", (hex_color or "").lower())
+    if not m: return None
+    num = int(m.group(1), 16)
+    r = max(0, int(((num>>16)&255)*(1-amount)))
+    g = max(0, int(((num>>8 )&255)*(1-amount)))
+    b = max(0, int(((num    )&255)*(1-amount)))
+    return f"#{r:02x}{g:02x}{b:02x}"
 
-    # ---- 一覧アイテムを作る（現在位置→色ピンの順）----
-    legend_items = []
+def make_pin_svg_data_uri(fill: str):
+    s = _darken_hex(_normalize_hex(fill)) or fill
+    svg = (
+        "<svg xmlns='http://www.w3.org/2000/svg' width='36' height='54' viewBox='0 0 36 54'>"
+        f"<path fill='{fill}' stroke='{s}' d='M18 0c-9.94 0-18 8.06-18 18 0 12 18 36 18 36s18-24 18-36C36 8.06 27.94 0 18 0z'/>"
+        "<circle cx='18' cy='18' r='6' fill='#ffffff'/>"
+        "</svg>"
+    )
+    return "data:image/svg+xml;utf8," + urllib.parse.quote(svg)
 
-    if has_current:
-        cur_meta  = legend_map.get("current_pin", {})
-        cur_label = cur_meta.get("label") or cur_meta.get("ラベル") or "現在位置"
-        cur_desc  = cur_meta.get("desc")  or cur_meta.get("説明") or ""
-        legend_items.append({
-            "kind": "current",
-            "icon_src": "https://maps.google.com/mapfiles/ms/icons/blue-dot.png",  # 地図と同じ青丸
-            "label": cur_label,
-            "desc":  cur_desc,
+# 描画（CSVの行順で、current_pin と “使われている色”だけを表示）
+to_render = []
+for row in legend_rows:
+    key   = (row["key"] or "").strip()
+    label = row["label"] or ""
+    desc  = row["desc"] or ""
+
+    if key.lower() == "current_pin":
+        if not has_current:
+            continue
+        to_render.append({
+            "icon_src": "https://maps.google.com/mapfiles/ms/icons/blue-dot.png",  # 現在位置アイコン
             "w": 20, "h": 20,
+            "label": label or "現在位置",
+            "desc":  desc,
+        })
+    else:
+        key_norm = canon_color_key(key)
+        if key_norm not in used_colors:
+            continue  # CSVにあるが、今は使っていない色 → 出さない
+        to_render.append({
+            "icon_src": make_pin_svg_data_uri(key_norm),
+            "w": 18, "h": 27,
+            "label": label or key.upper(),
+            "desc":  desc,
         })
 
-    if has_colors:
-        for color in sorted(used_colors):
-            meta  = legend_map.get(color, {})
-            label = meta.get("label") or meta.get("ラベル") or color.upper()
-            desc  = meta.get("desc")  or meta.get("説明") or ""
-            legend_items.append({
-                "kind": "color",
-                "icon_src": make_pin_svg_data_uri(color),  # 地図と同じピン形
-                "label": label,
-                "desc":  desc,
-                "w": 18, "h": 27,
-            })
-
-    # ---- 2カラムで描画（現在位置も同じ一覧に混ぜる）----
+if to_render:
+    st.write("---")
+    st.subheader("ピンの色の凡例")
     cols = st.columns(2)
-    for i, it in enumerate(legend_items):
-        safe_label = _html.escape(str(it["label"]))
-        safe_desc  = _html.escape(str(it["desc"]))
+    for i, it in enumerate(to_render):
+        safe_label = _html.escape(it["label"])
+        safe_desc  = _html.escape(it["desc"])
         with cols[i % 2]:
             st.markdown(
                 f"""
