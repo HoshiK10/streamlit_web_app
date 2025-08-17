@@ -9,20 +9,19 @@ def show_qr_simple():
     - サブヘッダーとバーは QR 表示がある時だけ出す
     - 未設定なら何も表示しない
     """
-    url = (st.secrets.get("APP_BASE_URL") or "").strip()
-    if not url:
-        return
+    base_url = (st.secrets.get("APP_BASE_URL") or "").strip()
+    if not base_url:
+        return  # 非表示
 
-    st.subheader("📱 このページのQRコード")
+    st.write("---")
+    st.subheader("このWebサイトのQRコード")
 
     buf = BytesIO()
     qr = qrcode.QRCode(box_size=8, border=2)
-    qr.add_data(url)  # クエリは含めない方針
+    qr.add_data(base_url)
     qr.make(fit=True)
     img = qr.make_image(fill_color="black", back_color="white")
     img.save(buf, format="PNG")
 
-    st.image(buf.getvalue(), caption=url, use_container_width=False)
-
-    if url.startswith("http://localhost"):
-        st.caption("⚠️ localhost は他端末からアクセスできません。スマホ共有は 192.168.x.x:8501 等を使ってください。")
+    # ✅ use_column_width → use_container_width に置き換え
+    st.image(buf.getvalue(), caption=base_url, use_container_width=False)

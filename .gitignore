@@ -7,3 +7,6 @@ __pycache__/
 
 # 念のためローカルのsecretsを誤コミット防止
 .streamlit/
+
+# 元ファイル
+三軒茶屋ランチ.xlsx
