@@ -27,6 +27,12 @@ st.markdown("""
   /* 一部ブラウザ向け：不要な強制改ページを避ける */
   * { page-break-after: auto !important; }
 }
+/* 凡例のライト/ダーク対応（Streamlitテーマの文字色を利用） */
+.legend-item { display:flex; align-items:flex-start; margin:10px 0; }
+.legend-icon { flex:0 0 auto; display:inline-block; margin:2px 10px 0 2px; }
+.legend-text { line-height:1.35; }
+.legend-title { font-weight:700; color: var(--text-color); }
+.legend-desc  { color: var(--text-color); opacity: .75; white-space: pre-wrap; font-size: 13px; }
 </style>
 """, unsafe_allow_html=True)
 st.title("🍽 近くの飲食店マップ")
@@ -247,12 +253,11 @@ if has_current or has_colors:
         with cols[i % 2]:
             st.markdown(
                 f"""
-<div style="display:flex;align-items:flex-start;margin:10px 0">
-  <img src="{it['icon_src']}" width="{it['w']}" height="{it['h']}"
-       style="flex:0 0 auto;display:inline-block;margin:2px 10px 0 2px"/>
-  <div style="line-height:1.35">
-    <div style="font-weight:700;color:#333">{safe_label}</div>
-    {f"<div style='color:#666;font-size:13px;white-space:pre-wrap'>{safe_desc}</div>" if safe_desc else ""}
+<div class="legend-item">
+  <img src="{it['icon_src']}" width="{it['w']}" height="{it['h']}" class="legend-icon"/>
+  <div class="legend-text">
+    <div class="legend-title">{safe_label}</div>
+    {f"<div class='legend-desc'>{safe_desc}</div>" if safe_desc else ""}
   </div>
 </div>
 """,
